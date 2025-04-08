@@ -18,9 +18,11 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useEffect } from "react"
+import axios from "axios"
 
 export default function Inventory() {
-  const { items, updateItemInventory } = useData()
+  const [items, setItems] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [sortField, setSortField] = useState<string>("name")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
@@ -29,17 +31,38 @@ export default function Inventory() {
   const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false)
   const [adjustmentType, setAdjustmentType] = useState<"add" | "subtract">("add")
 
-  // تصفية العناصر حسب البحث
+  // **Fetch inventory data from the backend**
+  useEffect(() => {
+    axios.get<{ id: string; name: string; category: string; amount: number; purchasePrice: number }[]>("/api/inventory")
+      .then((response) => setItems(response.data))
+      .catch((error) => console.error("Error fetching inventory:", error))
+  }, [])
+  
+
+  // **Update inventory in the database**
+  const updateItemInventory = async (itemId: string, newAmount: number) => {
+    try {
+      await axios.put(`/api/inventory/${itemId}`, { amount: newAmount })
+      setItems(prevItems =>
+        prevItems.map(item =>
+          item.id === itemId ? { ...item, amount: newAmount } : item
+        )
+      )
+    } catch (error) {
+      console.error("Error updating inventory:", error)
+    }
+  }
+
+  // **Filter items by search term**
   const filteredItems = items.filter(
     (item) =>
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase()),
+      item.category.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // ترتيب العناصر
+  // **Sort items**
   const sortedItems = [...filteredItems].sort((a, b) => {
     let comparison = 0
-
     switch (sortField) {
       case "name":
         comparison = a.name.localeCompare(b.name)
@@ -59,11 +82,10 @@ export default function Inventory() {
       default:
         comparison = 0
     }
-
     return sortDirection === "asc" ? comparison : -comparison
   })
 
-  // تبديل اتجاه الترتيب
+  // **Toggle sort direction**
   const toggleSort = (field: string) => {
     if (field === sortField) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc")
@@ -73,11 +95,11 @@ export default function Inventory() {
     }
   }
 
-  // حساب إجمالي قيمة المخزون
+  // **Calculate total inventory value**
   const totalInventoryValue = items.reduce((sum, item) => sum + item.purchasePrice * item.amount, 0)
 
-  // تعديل المخزون
-  const handleAdjustInventory = () => {
+  // **Adjust inventory**
+  const handleAdjustInventory = async () => {
     if (!selectedItem || adjustmentAmount <= 0) return
 
     const item = items.find((i) => i.id === selectedItem)
@@ -86,18 +108,99 @@ export default function Inventory() {
     const newAmount =
       adjustmentType === "add" ? item.amount + adjustmentAmount : Math.max(0, item.amount - adjustmentAmount)
 
-    updateItemInventory(selectedItem, newAmount)
+    await updateItemInventory(selectedItem, newAmount)
     setIsAdjustDialogOpen(false)
     setAdjustmentAmount(0)
   }
 
-  // فتح نافذة تعديل المخزون
+  // **Open adjust inventory dialog**
   const openAdjustDialog = (itemId: string, type: "add" | "subtract") => {
     setSelectedItem(itemId)
     setAdjustmentType(type)
     setAdjustmentAmount(0)
     setIsAdjustDialogOpen(true)
-  }
+    }
+  
+
+// export default function Inventory() {
+//   const { items, updateItemInventory } = useData()
+//   const [searchTerm, setSearchTerm] = useState("")
+//   const [sortField, setSortField] = useState<string>("name")
+//   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+//   const [selectedItem, setSelectedItem] = useState<string | null>(null)
+//   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0)
+//   const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false)
+//   const [adjustmentType, setAdjustmentType] = useState<"add" | "subtract">("add")
+
+//   // تصفية العناصر حسب البحث
+//   const filteredItems = items.filter(
+//     (item) =>
+//       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+//       item.category.toLowerCase().includes(searchTerm.toLowerCase()),
+//   )
+
+//   // ترتيب العناصر
+//   const sortedItems = [...filteredItems].sort((a, b) => {
+//     let comparison = 0
+
+//     switch (sortField) {
+//       case "name":
+//         comparison = a.name.localeCompare(b.name)
+//         break
+//       case "category":
+//         comparison = a.category.localeCompare(b.category)
+//         break
+//       case "amount":
+//         comparison = a.amount - b.amount
+//         break
+//       case "purchasePrice":
+//         comparison = a.purchasePrice - b.purchasePrice
+//         break
+//       case "totalValue":
+//         comparison = a.amount * a.purchasePrice - b.amount * b.purchasePrice
+//         break
+//       default:
+//         comparison = 0
+//     }
+
+//     return sortDirection === "asc" ? comparison : -comparison
+//   })
+
+//   // تبديل اتجاه الترتيب
+//   const toggleSort = (field: string) => {
+//     if (field === sortField) {
+//       setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+//     } else {
+//       setSortField(field)
+//       setSortDirection("asc")
+//     }
+//   }
+
+//   // حساب إجمالي قيمة المخزون
+//   const totalInventoryValue = items.reduce((sum, item) => sum + item.purchasePrice * item.amount, 0)
+
+//   // تعديل المخزون
+//   const handleAdjustInventory = () => {
+//     if (!selectedItem || adjustmentAmount <= 0) return
+
+//     const item = items.find((i) => i.id === selectedItem)
+//     if (!item) return
+
+//     const newAmount =
+//       adjustmentType === "add" ? item.amount + adjustmentAmount : Math.max(0, item.amount - adjustmentAmount)
+
+//     updateItemInventory(selectedItem, newAmount)
+//     setIsAdjustDialogOpen(false)
+//     setAdjustmentAmount(0)
+//   }
+
+//   // فتح نافذة تعديل المخزون
+//   const openAdjustDialog = (itemId: string, type: "add" | "subtract") => {
+//     setSelectedItem(itemId)
+//     setAdjustmentType(type)
+//     setAdjustmentAmount(0)
+//     setIsAdjustDialogOpen(true)
+//   }
 
   return (
     <Card className="card-hover">

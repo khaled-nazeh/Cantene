@@ -29,10 +29,14 @@ import {
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { useEffect } from "react"
+import axios from "axios"
 
 export default function Cash() {
-  const { cashTransactions, cashBalance, inventoryValue, totalAssets, addCashTransaction, deleteCashTransaction } =
-    useData()
+  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([])
+  const [cashBalance, setCashBalance] = useState(0)
+  const [inventoryValue, setInventoryValue] = useState(0)
+  const [totalAssets, setTotalAssets] = useState(0)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [newTransaction, setNewTransaction] = useState<Omit<CashTransaction, "id">>({
     amount: 0,
@@ -43,53 +47,129 @@ export default function Cash() {
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
 
+  // Fetch data from the backend
+  useEffect(() => {
+    axios.get("/api/cash")
+      .then((response) => {
+        setCashTransactions(response.data.cashTransactions)
+        setCashBalance(response.data.cashBalance)
+        setInventoryValue(response.data.inventoryValue)
+        setTotalAssets(response.data.totalAssets)
+      })
+      .catch((error) => console.error("Error fetching data:", error))
+  }, [])
+
   const handleAddTransaction = () => {
     if (newTransaction.description && newTransaction.amount !== 0) {
-      try {
-        // Asegurarse de que el monto sea un número válido
-        const amount =
-          newTransaction.type === "deposit"
-            ? Math.abs(Number(newTransaction.amount))
-            : -Math.abs(Number(newTransaction.amount))
+      const amount =
+        newTransaction.type === "deposit"
+          ? Math.abs(Number(newTransaction.amount))
+          : -Math.abs(Number(newTransaction.amount))
 
-        addCashTransaction({
-          ...newTransaction,
-          amount,
+      axios.post("/api/cash", { ...newTransaction, amount })
+        .then((response) => {
+          setCashTransactions([...cashTransactions, response.data])
+          setCashBalance(prev => prev + amount)
+          setTotalAssets(prev => prev + amount)
+          setIsAddDialogOpen(false)
+          setNewTransaction({
+            amount: 0,
+            description: "",
+            date: new Date().toISOString().split("T")[0],
+            type: "deposit",
+          })
         })
-
-        setNewTransaction({
-          amount: 0,
-          description: "",
-          date: new Date().toISOString().split("T")[0],
-          type: "deposit",
-        })
-
-        setIsAddDialogOpen(false)
-      } catch (err) {
-        console.error("Error al añadir transacción:", err)
-      }
+        .catch((error) => console.error("Error adding transaction:", error))
     } else {
-      alert("Por favor, complete todos los campos correctamente")
+      alert("Please fill in all fields correctly.")
     }
   }
 
   const handleDeleteTransaction = (id: string) => {
     if (confirm("هل أنت متأكد من رغبتك في حذف هذه المعاملة؟")) {
-      deleteCashTransaction(id)
+      axios.delete(`/api/cash/${id}`)
+        .then(() => {
+          const updatedTransactions = cashTransactions.filter((t) => t.id !== id)
+          setCashTransactions(updatedTransactions)
+          setCashBalance(updatedTransactions.reduce((sum, t) => sum + t.amount, 0))
+          setTotalAssets(cashBalance + inventoryValue)
+        })
+        .catch((error) => console.error("Error deleting transaction:", error))
     }
   }
 
-  // تصفية المعاملات
+  // Filter transactions based on search and type filter
   const filteredTransactions = cashTransactions
     .filter((transaction) => {
       const matchesSearch =
-        transaction.description.includes(searchTerm) || transaction.amount.toString().includes(searchTerm)
+        transaction.description.includes(searchTerm) ||
+        transaction.amount.toString().includes(searchTerm)
 
       const matchesType = typeFilter ? transaction.type === typeFilter : true
 
       return matchesSearch && matchesType
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+// export default function Cash() {
+//   const { cashTransactions, cashBalance, inventoryValue, totalAssets, addCashTransaction, deleteCashTransaction } =
+//     useData()
+//   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+//   const [newTransaction, setNewTransaction] = useState<Omit<CashTransaction, "id">>({
+//     amount: 0,
+//     description: "",
+//     date: new Date().toISOString().split("T")[0],
+//     type: "deposit",
+//   })
+//   const [searchTerm, setSearchTerm] = useState("")
+//   const [typeFilter, setTypeFilter] = useState<string | null>(null)
+
+//   const handleAddTransaction = () => {
+//     if (newTransaction.description && newTransaction.amount !== 0) {
+//       try {
+//         // Asegurarse de que el monto sea un número válido
+//         const amount =
+//           newTransaction.type === "deposit"
+//             ? Math.abs(Number(newTransaction.amount))
+//             : -Math.abs(Number(newTransaction.amount))
+
+//         addCashTransaction({
+//           ...newTransaction,
+//           amount,
+//         })
+
+//         setNewTransaction({
+//           amount: 0,
+//           description: "",
+//           date: new Date().toISOString().split("T")[0],
+//           type: "deposit",
+//         })
+
+//         setIsAddDialogOpen(false)
+//       } catch (err) {
+//         console.error("Error al añadir transacción:", err)
+//       }
+//     } else {
+//       alert("Por favor, complete todos los campos correctamente")
+//     }
+//   }
+
+//   const handleDeleteTransaction = (id: string) => {
+//     if (confirm("هل أنت متأكد من رغبتك في حذف هذه المعاملة؟")) {
+//       deleteCashTransaction(id)
+//     }
+//   }
+
+//   // تصفية المعاملات
+//   const filteredTransactions = cashTransactions
+//     .filter((transaction) => {
+//       const matchesSearch =
+//         transaction.description.includes(searchTerm) || transaction.amount.toString().includes(searchTerm)
+
+//       const matchesType = typeFilter ? transaction.type === typeFilter : true
+
+//       return matchesSearch && matchesType
+//     })
+//     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
     <Card className="card-hover">

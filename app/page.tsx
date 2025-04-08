@@ -65,8 +65,8 @@ export default function Home() {
     <div className="min-h-screen pb-10">
       <header className="py-6 px-4 md:px-6 glass-effect sticky top-0 z-10 border-b shadow-sm">
         <div className="container mx-auto">
-          <div className="flex flex-col md:flex-row md:items-center gap-2">
-            <h1 className="text-3xl md:text-4xl font-bold gradient-text">نظام إدارة كافتيريا المصنع</h1>
+          <div className="flex flex-col md:flex-row md:items-center ">
+            <h1 className="text-3xl md:text-4xl font-bold gradient-text">نظام إداره كانتين MMC</h1>
           </div>
         </div>
       </header>
@@ -147,7 +147,7 @@ export default function Home() {
       </main>
 
       <footer className="container mx-auto mt-auto py-4 text-center text-sm text-muted-foreground">
-        <p>© {new Date().getFullYear()} نظام إدارة كافتيريا المصنع. جميع الحقوق محفوظة.</p>
+        <p>© {new Date().getFullYear()} تم التطوير بواسطة مركز التأمين الفني MMC جميع الحقوق محفوظة.</p>
       </footer>
     </div>
   )

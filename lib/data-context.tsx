@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { connectToDatabase, createTables } from './db';
 
 export type User = {
   id: string
@@ -173,52 +174,94 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // تحميل البيانات عند بدء التشغيل
   useEffect(() => {
     async function loadData() {
-      setLoading(true)
-      setError(null)
-
+      setLoading(true);
+      setError(null);
       try {
-        // تحميل البيانات من localStorage
-        loadFromLocalStorage()
-        setLoading(false)
-      } catch (err) {
-        console.error("خطأ في تحميل البيانات:", err)
-        setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
-        setLoading(false)
+        const endpoints = [
+          "/api/users",
+          "/api/items",
+          "/api/purchases",
+          "/api/expenses",
+          "/api/cashTransactions",
+        ];
+    
+        const responses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
+    
+        // Check if any response is not OK (e.g., 404 or 500)
+        for (const res of responses) {
+          if (!res.ok) {
+            const text = await res.text(); // Get response body
+            throw new Error(`Failed to fetch ${res.url}: ${res.status} ${res.statusText}\nResponse: ${text}`);
+          }
+        }
+    
+        // Parse JSON
+        const [users, items, purchases, expenses, cashTransactions] = await Promise.all(responses.map(res => res.json()));
+    
+        setUsers(users);
+        setItems(items);
+        setPurchases(purchases);
+        setExpenses(expenses);
+        setCashTransactions(cashTransactions);
+      } catch (error) {
+        console.error("Error loading data:", error);
+        setError("Failed to load data");
+      } finally {
+        setLoading(false);
       }
     }
+    
+    loadData();
+  }, []);
+  
+  // useEffect(() => {
+  //   async function loadData() {
+  //     setLoading(true)
+  //     setError(null)
 
-    function loadFromLocalStorage() {
-      if (typeof window !== "undefined") {
-        // تحميل المستخدمين
-        const savedUsers = localStorage.getItem("cafeteria-users")
-        setUsers(savedUsers ? JSON.parse(savedUsers) : sampleUsers)
+  //     try {
+  //       // تحميل البيانات من localStorage
+  //       loadFromLocalStorage()
+  //       setLoading(false)
+  //     } catch (err) {
+  //       console.error("خطأ في تحميل البيانات:", err)
+  //       setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //       setLoading(false)
+  //     }
+  //   }
 
-        // تحميل المنتجات
-        const savedItems = localStorage.getItem("cafeteria-items")
-        setItems(savedItems ? JSON.parse(savedItems) : sampleItems)
+  //   function loadFromLocalStorage() {
+  //     if (typeof window !== "undefined") {
+  //       // تحميل المستخدمين
+  //       const savedUsers = localStorage.getItem("cafeteria-users")
+  //       setUsers(savedUsers ? JSON.parse(savedUsers) : sampleUsers)
 
-        // تحميل المشتريات
-        const savedPurchases = localStorage.getItem("cafeteria-purchases")
-        setPurchases(savedPurchases ? JSON.parse(savedPurchases) : samplePurchases)
+  //       // تحميل المنتجات
+  //       const savedItems = localStorage.getItem("cafeteria-items")
+  //       setItems(savedItems ? JSON.parse(savedItems) : sampleItems)
 
-        // تحميل المصروفات
-        const savedExpenses = localStorage.getItem("cafeteria-expenses")
-        setExpenses(savedExpenses ? JSON.parse(savedExpenses) : sampleExpenses)
+  //       // تحميل المشتريات
+  //       const savedPurchases = localStorage.getItem("cafeteria-purchases")
+  //       setPurchases(savedPurchases ? JSON.parse(savedPurchases) : samplePurchases)
 
-        // تحميل معاملات النقدية
-        const savedCashTransactions = localStorage.getItem("cafeteria-cash")
-        setCashTransactions(savedCashTransactions ? JSON.parse(savedCashTransactions) : sampleCashTransactions)
-      } else {
-        setUsers(sampleUsers)
-        setItems(sampleItems)
-        setPurchases(samplePurchases)
-        setExpenses(sampleExpenses)
-        setCashTransactions(sampleCashTransactions)
-      }
-    }
+  //       // تحميل المصروفات
+  //       const savedExpenses = localStorage.getItem("cafeteria-expenses")
+  //       setExpenses(savedExpenses ? JSON.parse(savedExpenses) : sampleExpenses)
 
-    loadData()
-  }, [])
+  //       // تحميل معاملات النقدية
+  //       const savedCashTransactions = localStorage.getItem("cafeteria-cash")
+  //       setCashTransactions(savedCashTransactions ? JSON.parse(savedCashTransactions) : sampleCashTransactions)
+  //     } else {
+  //       setUsers(sampleUsers)
+  //       setItems(sampleItems)
+  //       setPurchases(samplePurchases)
+  //       setExpenses(sampleExpenses)
+  //       setCashTransactions(sampleCashTransactions)
+  //     }
+  //   }
+
+  //   loadData()
+  // }, [])
 
   // حفظ البيانات في localStorage عند تغييرها
   useEffect(() => {
@@ -252,187 +295,420 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [cashTransactions])
 
   // إضافة مستخدم جديد
-  const addUser = (user: Omit<User, "id">) => {
+  const addUser = async (user: Omit<User, "id">) => {
     try {
-      const newUser = { ...user, id: generateId() }
-      setUsers([...users, newUser])
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(user),
+      });
+  
+      if (!res.ok) throw new Error("Failed to add user");
+  
+      const newUser = await res.json();
+      setUsers([...users, newUser]); // Update state after API call
     } catch (err) {
-      console.error("خطأ في إضافة المستخدم:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+      console.error("Error adding user:", err);
+      setError("Failed to add user.");
     }
-  }
+  };
+  
+  // const addUser = (user: Omit<User, "id">) => {
+  //   try {
+  //     const newUser = { ...user, id: generateId() }
+  //     setUsers([...users, newUser])
+  //   } catch (err) {
+  //     console.error("خطأ في إضافة المستخدم:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //   }
+  // }
 
   // تحديث مستخدم
-  const updateUser = (id: string, user: Omit<User, "id">) => {
+  const updateUser = async (id: string, user: Omit<User, "id">) => {
     try {
-      setUsers(users.map((u) => (u.id === id ? { ...user, id } : u)))
+      const res = await fetch(`/api/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(user),
+      });
+  
+      if (!res.ok) throw new Error("فشل تحديث المستخدم");
+  
+      const updatedUser = await res.json();
+      setUsers(users.map((u) => (u.id === id ? updatedUser : u)));
     } catch (err) {
-      console.error("خطأ في تحديث المستخدم:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+      console.error("خطأ في تحديث المستخدم:", err);
+      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف");
     }
-  }
+  };
+  
+  // const updateUser = (id: string, user: Omit<User, "id">) => {
+  //   try {
+  //     setUsers(users.map((u) => (u.id === id ? { ...user, id } : u)))
+  //   } catch (err) {
+  //     console.error("خطأ في تحديث المستخدم:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //   }
+  // }
 
   // حذف مستخدم
-  const deleteUser = (id: string) => {
+  const deleteUser = async (id: string) => {
     try {
-      // التحقق مما إذا كان المستخدم لديه مشتريات
-      const userPurchases = purchases.filter((p) => p.userId === id)
-      if (userPurchases.length > 0) {
-        throw new Error("لا يمكن حذف مستخدم لديه مشتريات. يرجى حذف مشترياته أولاً.")
-      }
-
-      setUsers(users.filter((user) => user.id !== id))
+      const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+  
+      if (!res.ok) throw new Error("Failed to delete user");
+  
+      setUsers(users.filter((u) => u.id !== id));
     } catch (err) {
-      console.error("خطأ في حذف المستخدم:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
-      throw err
+      console.error("Error deleting user:", err);
+      setError("Failed to delete user.");
     }
-  }
+  };
+  
+  // const deleteUser = (id: string) => {
+  //   try {
+  //     // التحقق مما إذا كان المستخدم لديه مشتريات
+  //     const userPurchases = purchases.filter((p) => p.userId === id)
+  //     if (userPurchases.length > 0) {
+  //       throw new Error("لا يمكن حذف مستخدم لديه مشتريات. يرجى حذف مشترياته أولاً.")
+  //     }
+
+  //     setUsers(users.filter((user) => user.id !== id))
+  //   } catch (err) {
+  //     console.error("خطأ في حذف المستخدم:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //     throw err
+  //   }
+  // }
 
   // إضافة مصروف جديد
-  const addExpense = (expense: Omit<Expense, "id">) => {
+  const addExpense = async (expense: Omit<Expense, "id">) => {
     try {
-      const newExpense = { ...expense, id: generateId() }
-      setExpenses([...expenses, newExpense])
-
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(expense),
+      });
+  
+      if (!res.ok) throw new Error("فشل إضافة المصروف");
+  
+      const newExpense = await res.json();
+      setExpenses([...expenses, newExpense]);
+  
       // إضافة معاملة نقدية مقابلة
-      addCashTransaction({
-        amount: -expense.amount,
-        description: `مصروف: ${expense.name}`,
-        date: expense.date,
+      await addCashTransaction({
+        amount: -newExpense.amount,
+        description: `مصروف: ${newExpense.name}`,
+        date: newExpense.date,
         type: "withdrawal",
-      })
+      });
     } catch (err) {
-      console.error("خطأ في إضافة المصروف:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+      console.error("خطأ في إضافة المصروف:", err);
+      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف");
     }
-  }
+  };
 
-  // حذف مصروف
-  const deleteExpense = (id: string) => {
+  const deleteExpense = async (id: string) => {
     try {
-      const expense = expenses.find((e) => e.id === id)
-      if (expense) {
-        setExpenses(expenses.filter((expense) => expense.id !== id))
-
-        // إضافة معاملة نقدية مقابلة لإلغاء المصروف
-        addCashTransaction({
-          amount: expense.amount, // إعادة المبلغ (إيجابي)
-          description: `إلغاء مصروف: ${expense.name}`,
-          date: new Date().toISOString().split("T")[0],
-          type: "deposit",
-        })
-      }
+      const expense = expenses.find((e) => e.id === id);
+      if (!expense) throw new Error("المصروف غير موجود");
+  
+      const res = await fetch(`/api/expenses/${id}`, {
+        method: "DELETE",
+      });
+  
+      if (!res.ok) throw new Error("فشل حذف المصروف");
+  
+      setExpenses(expenses.filter((expense) => expense.id !== id));
+  
+      // إضافة معاملة نقدية مقابلة لإلغاء المصروف
+      await addCashTransaction({
+        amount: expense.amount, // إعادة المبلغ (إيجابي)
+        description: `إلغاء مصروف: ${expense.name}`,
+        date: new Date().toISOString().split("T")[0],
+        type: "deposit",
+      });
     } catch (err) {
-      console.error("خطأ في حذف المصروف:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+      console.error("خطأ في حذف المصروف:", err);
+      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف");
     }
-  }
+  };
+  
+  // const addExpense = (expense: Omit<Expense, "id">) => {
+  //   try {
+  //     const newExpense = { ...expense, id: generateId() }
+  //     setExpenses([...expenses, newExpense])
+
+  //     // إضافة معاملة نقدية مقابلة
+  //     addCashTransaction({
+  //       amount: -expense.amount,
+  //       description: `مصروف: ${expense.name}`,
+  //       date: expense.date,
+  //       type: "withdrawal",
+  //     })
+  //   } catch (err) {
+  //     console.error("خطأ في إضافة المصروف:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //   }
+  // }
+
+  // // حذف مصروف
+  // const deleteExpense = (id: string) => {
+  //   try {
+  //     const expense = expenses.find((e) => e.id === id)
+  //     if (expense) {
+  //       setExpenses(expenses.filter((expense) => expense.id !== id))
+
+  //       // إضافة معاملة نقدية مقابلة لإلغاء المصروف
+  //       addCashTransaction({
+  //         amount: expense.amount, // إعادة المبلغ (إيجابي)
+  //         description: `إلغاء مصروف: ${expense.name}`,
+  //         date: new Date().toISOString().split("T")[0],
+  //         type: "deposit",
+  //       })
+  //     }
+  //   } catch (err) {
+  //     console.error("خطأ في حذف المصروف:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //   }
+  // }
 
   // إضافة منتج جديد
-  const addItem = (item: Omit<Item, "id">) => {
-    try {
-      const newItem = { ...item, id: generateId() }
-      setItems([...items, newItem])
 
+  const addItem = async (item: Omit<Item, "id">) => {
+    try {
+      const res = await fetch("/api/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item),
+      });
+  
+      if (!res.ok) throw new Error("فشل إضافة المنتج");
+  
+      const newItem = await res.json();
+      setItems([...items, newItem]);
+  
       // إذا تم شراء مخزون جديد، أضف معاملة نقدية
-      if (item.amount > 0) {
-        const totalCost = item.amount * item.purchasePrice
-        addCashTransaction({
+      if (newItem.amount > 0) {
+        const totalCost = newItem.amount * newItem.purchasePrice;
+        await addCashTransaction({
           amount: -totalCost,
-          description: `شراء مخزون: ${item.name} (${item.amount} وحدة)`,
+          description: `شراء مخزون: ${newItem.name} (${newItem.amount} وحدة)`,
           date: new Date().toISOString().split("T")[0],
           type: "withdrawal",
-        })
+        });
       }
     } catch (err) {
-      console.error("خطأ في إضافة المنتج:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+      console.error("خطأ في إضافة المنتج:", err);
+      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف");
     }
-  }
-
-  // تحديث منتج
-  const updateItem = (id: string, item: Omit<Item, "id">) => {
+  };
+  
+  const updateItem = async (id: string, item: Omit<Item, "id">) => {
     try {
-      const existingItem = items.find((i) => i.id === id)
-      if (existingItem) {
-        // إذا تغيرت كمية المخزون، أضف معاملة نقدية للفرق
-        if (existingItem.amount !== item.amount) {
-          const amountDifference = item.amount - existingItem.amount
-          if (amountDifference !== 0) {
-            const costDifference = amountDifference * item.purchasePrice
-            addCashTransaction({
-              amount: -costDifference,
-              description: `تعديل مخزون: ${item.name} (${amountDifference > 0 ? "+" : ""}${amountDifference} وحدة)`,
-              date: new Date().toISOString().split("T")[0],
-              type: costDifference > 0 ? "withdrawal" : "deposit",
-            })
-          }
-        }
-      }
-
-      setItems(items.map((i) => (i.id === id ? { ...item, id } : i)))
-    } catch (err) {
-      console.error("خطأ في تحديث المنتج:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
-    }
-  }
-
-  // تحديث مخزون المنتج
-  const updateItemInventory = (id: string, amount: number) => {
-    try {
-      const item = items.find((i) => i.id === id)
-      if (!item) throw new Error("المنتج غير موجود")
-
-      const amountDifference = amount - item.amount
+      const existingItem = items.find((i) => i.id === id);
+      if (!existingItem) throw new Error("المنتج غير موجود");
+  
+      const res = await fetch(`/api/items/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item),
+      });
+  
+      if (!res.ok) throw new Error("فشل تحديث المنتج");
+  
+      setItems(items.map((i) => (i.id === id ? { ...item, id } : i)));
+  
+      // إذا تغيرت كمية المخزون، أضف معاملة نقدية للفرق
+      const amountDifference = item.amount - existingItem.amount;
       if (amountDifference !== 0) {
-        const costDifference = amountDifference * item.purchasePrice
-
-        // تحديث المخزون
-        setItems(items.map((i) => (i.id === id ? { ...i, amount } : i)))
-
-        // إضافة معاملة نقدية للفرق
-        addCashTransaction({
+        const costDifference = amountDifference * item.purchasePrice;
+        await addCashTransaction({
           amount: -costDifference,
           description: `تعديل مخزون: ${item.name} (${amountDifference > 0 ? "+" : ""}${amountDifference} وحدة)`,
           date: new Date().toISOString().split("T")[0],
           type: costDifference > 0 ? "withdrawal" : "deposit",
-        })
+        });
       }
     } catch (err) {
-      console.error("خطأ في تحديث المخزون:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+      console.error("خطأ في تحديث المنتج:", err);
+      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف");
     }
-  }
-
-  // حذف منتج
-  const deleteItem = (id: string) => {
+  };
+  
+  const updateItemInventory = async (id: string, amount: number) => {
     try {
-      // التحقق مما إذا كان المنتج لديه مشتريات
-      const itemPurchases = purchases.filter((p) => p.itemId === id)
-      if (itemPurchases.length > 0) {
-        throw new Error("لا يمكن حذف منتج له مشتريات. يرجى حذف المشتريات أولاً.")
+      const item = items.find((i) => i.id === id);
+      if (!item) throw new Error("المنتج غير موجود");
+  
+      const res = await fetch(`/api/items/${id}/inventory`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+  
+      if (!res.ok) throw new Error("فشل تحديث المخزون");
+  
+      setItems(items.map((i) => (i.id === id ? { ...i, amount } : i)));
+  
+      // إضافة معاملة نقدية للفرق
+      const amountDifference = amount - item.amount;
+      if (amountDifference !== 0) {
+        const costDifference = amountDifference * item.purchasePrice;
+        await addCashTransaction({
+          amount: -costDifference,
+          description: `تعديل مخزون: ${item.name} (${amountDifference > 0 ? "+" : ""}${amountDifference} وحدة)`,
+          date: new Date().toISOString().split("T")[0],
+          type: costDifference > 0 ? "withdrawal" : "deposit",
+        });
       }
-
-      const item = items.find((i) => i.id === id)
-      if (item && item.amount > 0) {
-        // إضافة معاملة نقدية لاسترداد قيمة المخزون
-        const inventoryValue = item.amount * item.purchasePrice
-        addCashTransaction({
+    } catch (err) {
+      console.error("خطأ في تحديث المخزون:", err);
+      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف");
+    }
+  };
+  
+  const deleteItem = async (id: string) => {
+    try {
+      const item = items.find((i) => i.id === id);
+      if (!item) throw new Error("المنتج غير موجود");
+  
+      // التحقق مما إذا كان المنتج لديه مشتريات
+      const resPurchases = await fetch(`/api/purchases?itemId=${id}`);
+      if (!resPurchases.ok) throw new Error("فشل التحقق من المشتريات");
+  
+      const itemPurchases = await resPurchases.json();
+      if (itemPurchases.length > 0) {
+        throw new Error("لا يمكن حذف منتج له مشتريات. يرجى حذف المشتريات أولاً.");
+      }
+  
+      const res = await fetch(`/api/items/${id}`, {
+        method: "DELETE",
+      });
+  
+      if (!res.ok) throw new Error("فشل حذف المنتج");
+  
+      setItems(items.filter((item) => item.id !== id));
+  
+      // إضافة معاملة نقدية لاسترداد قيمة المخزون
+      if (item.amount > 0) {
+        const inventoryValue = item.amount * item.purchasePrice;
+        await addCashTransaction({
           amount: inventoryValue,
           description: `استرداد قيمة مخزون: ${item.name} (${item.amount} وحدة)`,
           date: new Date().toISOString().split("T")[0],
           type: "deposit",
-        })
+        });
       }
-
-      setItems(items.filter((item) => item.id !== id))
     } catch (err) {
-      console.error("خطأ في حذف المنتج:", err)
-      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
-      throw err
+      console.error("خطأ في حذف المنتج:", err);
+      setError(err instanceof Error ? err.message : "حدث خطأ غير معروف");
     }
-  }
+  };
+  
+  // const addItem = (item: Omit<Item, "id">) => {
+  //   try {
+  //     const newItem = { ...item, id: generateId() }
+  //     setItems([...items, newItem])
+
+  //     // إذا تم شراء مخزون جديد، أضف معاملة نقدية
+  //     if (item.amount > 0) {
+  //       const totalCost = item.amount * item.purchasePrice
+  //       addCashTransaction({
+  //         amount: -totalCost,
+  //         description: `شراء مخزون: ${item.name} (${item.amount} وحدة)`,
+  //         date: new Date().toISOString().split("T")[0],
+  //         type: "withdrawal",
+  //       })
+  //     }
+  //   } catch (err) {
+  //     console.error("خطأ في إضافة المنتج:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //   }
+  // }
+
+  // // تحديث منتج
+  // const updateItem = (id: string, item: Omit<Item, "id">) => {
+  //   try {
+  //     const existingItem = items.find((i) => i.id === id)
+  //     if (existingItem) {
+  //       // إذا تغيرت كمية المخزون، أضف معاملة نقدية للفرق
+  //       if (existingItem.amount !== item.amount) {
+  //         const amountDifference = item.amount - existingItem.amount
+  //         if (amountDifference !== 0) {
+  //           const costDifference = amountDifference * item.purchasePrice
+  //           addCashTransaction({
+  //             amount: -costDifference,
+  //             description: `تعديل مخزون: ${item.name} (${amountDifference > 0 ? "+" : ""}${amountDifference} وحدة)`,
+  //             date: new Date().toISOString().split("T")[0],
+  //             type: costDifference > 0 ? "withdrawal" : "deposit",
+  //           })
+  //         }
+  //       }
+  //     }
+
+  //     setItems(items.map((i) => (i.id === id ? { ...item, id } : i)))
+  //   } catch (err) {
+  //     console.error("خطأ في تحديث المنتج:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //   }
+  // }
+
+  // // تحديث مخزون المنتج
+  // const updateItemInventory = (id: string, amount: number) => {
+  //   try {
+  //     const item = items.find((i) => i.id === id)
+  //     if (!item) throw new Error("المنتج غير موجود")
+
+  //     const amountDifference = amount - item.amount
+  //     if (amountDifference !== 0) {
+  //       const costDifference = amountDifference * item.purchasePrice
+
+  //       // تحديث المخزون
+  //       setItems(items.map((i) => (i.id === id ? { ...i, amount } : i)))
+
+  //       // إضافة معاملة نقدية للفرق
+  //       addCashTransaction({
+  //         amount: -costDifference,
+  //         description: `تعديل مخزون: ${item.name} (${amountDifference > 0 ? "+" : ""}${amountDifference} وحدة)`,
+  //         date: new Date().toISOString().split("T")[0],
+  //         type: costDifference > 0 ? "withdrawal" : "deposit",
+  //       })
+  //     }
+  //   } catch (err) {
+  //     console.error("خطأ في تحديث المخزون:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //   }
+  // }
+
+  // // حذف منتج
+  // const deleteItem = (id: string) => {
+  //   try {
+  //     // التحقق مما إذا كان المنتج لديه مشتريات
+  //     const itemPurchases = purchases.filter((p) => p.itemId === id)
+  //     if (itemPurchases.length > 0) {
+  //       throw new Error("لا يمكن حذف منتج له مشتريات. يرجى حذف المشتريات أولاً.")
+  //     }
+
+  //     const item = items.find((i) => i.id === id)
+  //     if (item && item.amount > 0) {
+  //       // إضافة معاملة نقدية لاسترداد قيمة المخزون
+  //       const inventoryValue = item.amount * item.purchasePrice
+  //       addCashTransaction({
+  //         amount: inventoryValue,
+  //         description: `استرداد قيمة مخزون: ${item.name} (${item.amount} وحدة)`,
+  //         date: new Date().toISOString().split("T")[0],
+  //         type: "deposit",
+  //       })
+  //     }
+
+  //     setItems(items.filter((item) => item.id !== id))
+  //   } catch (err) {
+  //     console.error("خطأ في حذف المنتج:", err)
+  //     setError(err instanceof Error ? err.message : "حدث خطأ غير معروف")
+  //     throw err
+  //   }
+  // }
 
   // إضافة مشتراة جديدة
   const addPurchase = (purchase: Omit<Purchase, "id" | "total">) => {
